@@ -9,6 +9,40 @@ from tkinter.filedialog import askopenfilename
 from PIL import Image
 
 
+def remove_outliers(df, threshold=0.5, n_points=2, drop=1):
+    """
+    Removes outliers from a set of y-values based on distance deviation.
+    
+    Parameters:
+        y: list or np.array - y-coordinates of the points
+        threshold: float - deviation threshold for considering a point as an outlier
+        n_points: int - number of initial points to ignore in outlier detection
+    
+    Returns:
+        filtered_x: np.array - x coordinates with outliers removed
+        filtered_y: np.array - y coordinates with outliers removed
+    """
+    
+    df = df.tail(-drop).reset_index(drop=True)
+    x = df.x
+    y = df.y
+    
+    differences = np.array([y[i] - np.mean(y[i-n_points:i]) for i in range(n_points, len(y))])
+    median_diff = np.median(differences[n_points:])
+    std_diff = np.std(differences[n_points:])
+    
+    outlier_mask = np.abs(differences - median_diff) > (threshold * std_diff)
+    mask = np.ones_like(y, dtype=bool)
+    
+    mask[n_points:][outlier_mask] = False
+    mask[:n_points] = True
+    
+    filtered_y = y[mask]
+    filtered_x = x[mask]
+    
+    return filtered_x, filtered_y
+    
+
 class GUI(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -160,14 +194,17 @@ class HomePage(tk.Frame):
 
         df = pd.DataFrame(list(zip(X, Y)), columns=['X', 'Y'])
         # If all point to be kept, comment the following line
-        df = df.drop_duplicates(subset='X', keep='last') # keeps only one point
+        if False:
+            df = df.drop_duplicates(subset='X', keep='last') # keeps only one point
+        else:
+            x, y= remove_outliers(df, threshold=0.1, n_points=10, drop=1)
+            x_new = np.linspace(np.min(x),np.max(x), 300)
+            y_new = np.interp(x_new, x, y)
+            df = pd.DataFrame(data = {'X': x_new, 'Y': y_new})
         
         if askyesno('Before we end',"Normalize?"):
             df.Y = df.Y-np.min(df.Y)
             df.Y = df.Y/np.max(df.Y)
-
-        plt.plot(df.X, df.Y)
-        plt.show()
 
         path_save = str(tk.filedialog.askdirectory()) + '/'
         if bool(path_save):
